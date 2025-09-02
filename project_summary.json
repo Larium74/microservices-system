@@ -1,0 +1,194 @@
+{
+  "project": {
+    "name": "Sistema de Microservicios NestJS",
+    "version": "1.0.0",
+    "description": "Arquitectura de microservicios completa con NestJS, bases de datos múltiples, WebSockets y Docker",
+    "created": "2024-12-27",
+    "status": "completed"
+  },
+  "architecture": {
+    "pattern": "Microservicios",
+    "framework": "NestJS + TypeScript",
+    "containerization": "Docker + Docker Compose",
+    "communication": "HTTP REST + WebSockets",
+    "authentication": "JWT"
+  },
+  "services": {
+    "api-gateway": {
+      "port": 3000,
+      "description": "Punto de entrada principal, enruta peticiones a microservicios",
+      "technologies": ["NestJS", "JWT", "Passport", "Axios"],
+      "endpoints": [
+        "GET /api/v1 - Información del API",
+        "GET /api/v1/health - Estado de salud",
+        "/api/v1/auth/* - Autenticación",
+        "/api/v1/users/* - Gestión de usuarios",
+        "/api/v1/products/* - Gestión de productos",
+        "/api/v1/notifications/* - Notificaciones"
+      ]
+    },
+    "user-service": {
+      "port": 3001,
+      "description": "Gestión de usuarios y autenticación",
+      "technologies": ["NestJS", "TypeORM", "PostgreSQL", "bcryptjs", "JWT"],
+      "database": {
+        "type": "PostgreSQL",
+        "host": "postgres:5432",
+        "database": "userdb"
+      },
+      "features": [
+        "Registro y login de usuarios",
+        "Gestión de perfiles",
+        "Autenticación JWT",
+        "Roles de usuario",
+        "Activación/desactivación de cuentas"
+      ]
+    },
+    "product-service": {
+      "port": 3002,
+      "description": "Gestión de productos y categorías",
+      "technologies": ["NestJS", "Mongoose", "MongoDB"],
+      "database": {
+        "type": "MongoDB",
+        "host": "mongodb:27017",
+        "database": "productdb"
+      },
+      "features": [
+        "CRUD de productos",
+        "Gestión de categorías",
+        "Sistema de reseñas",
+        "Búsqueda y filtros",
+        "Productos destacados",
+        "Control de stock"
+      ]
+    },
+    "notification-service": {
+      "port": 3003,
+      "description": "Notificaciones en tiempo real",
+      "technologies": ["NestJS", "Socket.IO", "Redis", "WebSockets"],
+      "database": {
+        "type": "Redis",
+        "host": "redis:6379"
+      },
+      "features": [
+        "Notificaciones en tiempo real",
+        "WebSockets para comunicación bidireccional",
+        "Persistencia en Redis",
+        "Notificaciones broadcast",
+        "Historial de notificaciones",
+        "Estado de lectura"
+      ]
+    }
+  },
+  "databases": {
+    "postgresql": {
+      "service": "postgres",
+      "port": 5432,
+      "database": "userdb",
+      "usage": "Datos estructurados de usuarios"
+    },
+    "mongodb": {
+      "service": "mongodb",
+      "port": 27017,
+      "database": "productdb",
+      "usage": "Datos de productos con esquema flexible"
+    },
+    "redis": {
+      "service": "redis",
+      "port": 6379,
+      "usage": "Cache, sesiones y notificaciones en tiempo real"
+    }
+  },
+  "key_features": [
+    "Arquitectura de microservicios escalable",
+    "Múltiples bases de datos especializadas",
+    "Autenticación JWT centralizada",
+    "Comunicación en tiempo real con WebSockets",
+    "API Gateway para enrutamiento",
+    "Containerización con Docker",
+    "Validación de datos con class-validator",
+    "Documentación automática de APIs",
+    "Manejo de errores centralizado",
+    "Configuración por variables de entorno"
+  ],
+  "development": {
+    "scripts": {
+      "start-dev": "./scripts/start-dev.sh - Iniciar todos los servicios en desarrollo",
+      "stop-dev": "./scripts/stop-dev.sh - Detener todos los servicios",
+      "build-all": "./scripts/build-all.sh - Construir todos los microservicios",
+      "quick-test": "./scripts/quick-test.sh - Verificación rápida de servicios",
+      "test-all": "./scripts/test-all.sh - Suite completa de pruebas automatizadas"
+    },
+    "commands": {
+      "build": "docker-compose build",
+      "up": "docker-compose up -d",
+      "down": "docker-compose down",
+      "logs": "docker-compose logs -f [service]"
+    },
+    "testing": {
+      "test-endpoints.md": "Guía completa con comandos cURL para todos los endpoints",
+      "quick-test.sh": "Script de verificación rápida (30 segundos)",
+      "test-all.sh": "Suite automatizada completa (2-3 minutos)",
+      "test-results.json": "Resultados de la última ejecución de pruebas"
+    }
+  },
+  "api_endpoints": {
+    "authentication": {
+      "POST /api/v1/auth/register": "Registro de usuario",
+      "POST /api/v1/auth/login": "Login de usuario",
+      "GET /api/v1/auth/profile": "Obtener perfil (requiere JWT)",
+      "POST /api/v1/auth/refresh": "Renovar token"
+    },
+    "users": {
+      "GET /api/v1/users": "Listar usuarios",
+      "GET /api/v1/users/:id": "Obtener usuario por ID",
+      "POST /api/v1/users": "Crear usuario",
+      "PUT /api/v1/users/:id": "Actualizar usuario",
+      "DELETE /api/v1/users/:id": "Eliminar usuario"
+    },
+    "products": {
+      "GET /api/v1/products": "Listar productos con filtros",
+      "GET /api/v1/products/:id": "Obtener producto por ID",
+      "POST /api/v1/products": "Crear producto",
+      "PUT /api/v1/products/:id": "Actualizar producto",
+      "DELETE /api/v1/products/:id": "Eliminar producto",
+      "POST /api/v1/products/:id/reviews": "Agregar reseña"
+    },
+    "notifications": {
+      "GET /api/v1/notifications": "Obtener notificaciones",
+      "POST /api/v1/notifications/send": "Enviar notificación",
+      "POST /api/v1/notifications/:id/read": "Marcar como leída",
+      "GET /api/v1/notifications/unread-count": "Contador de no leídas"
+    }
+  },
+  "websocket_events": {
+    "connection": "Conectar al servicio de notificaciones",
+    "new_notification": "Nueva notificación recibida",
+    "notification_read": "Notificación marcada como leída",
+    "unread_count": "Actualización del contador",
+    "pending_notifications": "Notificaciones pendientes al conectar"
+  },
+  "security": {
+    "authentication": "JWT Bearer Token",
+    "password_hashing": "bcryptjs",
+    "cors_enabled": true,
+    "validation": "class-validator + class-transformer"
+  },
+  "deployment": {
+    "containerization": "Docker",
+    "orchestration": "Docker Compose",
+    "networking": "Bridge network 'microservices-network'",
+    "volumes": "Persistencia para PostgreSQL, MongoDB y Redis",
+    "environment": "Variables de entorno configurables"
+  },
+  "next_steps": [
+    "Implementar tests unitarios y de integración",
+    "Agregar documentación Swagger/OpenAPI",
+    "Implementar circuit breakers",
+    "Agregar monitoreo y logging centralizado",
+    "Implementar rate limiting",
+    "Configurar CI/CD pipeline",
+    "Agregar métricas con Prometheus",
+    "Implementar tracing distribuido"
+  ]
+}
