@@ -1,5 +1,6 @@
 # 🧪 Guía de Pruebas con cURL - Sistema de Microservicios
-
+#
+> ⭐ Si te resulta útil este proyecto, ¡ponle una estrellita al repositorio en GitHub!
 ## 📋 Índice
 - [Verificación de Servicios](#verificación-de-servicios)
 - [Autenticación](#autenticación)
@@ -10,9 +11,9 @@
 - [Pruebas de Estado y Salud](#pruebas-de-estado-y-salud)
 - [Pruebas de Base de Datos](#pruebas-de-base-de-datos)
 
----
 
 ## 🔍 Verificación de Servicios
+
 
 ### Verificar que todos los servicios estén ejecutándose
 ```bash
@@ -46,7 +47,7 @@ curl -s http://localhost:3003 | jq
 
 ### Endpoints de salud
 ```bash
-# API Gateway - Health check
+# API Gateway - Health check  -----
 curl -s http://localhost:3000/api/v1/health | jq
 
 # User Service - Health check
