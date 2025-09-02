@@ -34,7 +34,7 @@ Sistema completo de microservicios desarrollado con **NestJS** y **TypeScript**,
 
 ### 1. Clonar el repositorio
 ```bash
-git clone <repository-url>
+git clone https://github.com/jaimeirazabal1/microservicios-base-nestjs
 cd base_microservicios
 ```
 
