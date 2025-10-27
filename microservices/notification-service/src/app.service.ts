@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-
 @Injectable()
 export class AppService {
   getServiceInfo() {
@@ -16,7 +15,6 @@ export class AppService {
       timestamp: new Date().toISOString(),
     };
   }
-
   getHealth() {
     return {
       status: 'ok',

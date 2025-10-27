@@ -3,160 +3,134 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { PrismaService } from 'src/prisma-service/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { Category, CategoryDocument } from './schemas/category.schema';
-
 @Injectable()
 export class CategoryService {
-  constructor(
-    @InjectModel(Category.name)
-    private categoryModel: Model<CategoryDocument>,
-  ) {}
-
-  async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
-    // Verificar si el nombre ya existe
-    const existingByName = await this.categoryModel.findOne({
-      name: createCategoryDto.name,
+  constructor(private readonly prisma: PrismaService) {}
+  async create(createCategoryDto: CreateCategoryDto) {
+    const { name, slug } = createCategoryDto;
+    const existingByName = await this.prisma.category.findUnique({
+      where: { name },
     });
-
     if (existingByName) {
       throw new ConflictException('Ya existe una categoría con ese nombre');
     }
-
-    // Verificar si el slug ya existe
-    const existingBySlug = await this.categoryModel.findOne({
-      slug: createCategoryDto.slug,
+    const existingBySlug = await this.prisma.category.findUnique({
+      where: { slug },
     });
-
     if (existingBySlug) {
       throw new ConflictException('Ya existe una categoría con ese slug');
     }
-
-    const category = new this.categoryModel(createCategoryDto);
-    return category.save();
+    return this.prisma.category.create({
+      data: createCategoryDto,
+    });
   }
-
-  async findAll(page: number = 1, limit: number = 10, search?: string, active?: boolean) {
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+    active?: boolean,
+  ) {
     const skip = (page - 1) * limit;
-    const filter: any = {};
-
+    const where: any = {};
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
       ];
     }
-
     if (active !== undefined) {
-      filter.isActive = active;
+      where.isActive = active;
     }
-
-    const [categories, total] = await Promise.all([
-      this.categoryModel
-        .find(filter)
-        .skip(skip)
-        .limit(limit)
-        .sort({ createdAt: -1 })
-        .exec(),
-      this.categoryModel.countDocuments(filter),
+    const [data, total] = await Promise.all([
+      this.prisma.category.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.category.count({ where }),
     ]);
-
     return {
-      data: categories,
+      data,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     };
   }
-
-  async findOne(id: string): Promise<Category> {
-    const category = await this.categoryModel.findById(id).exec();
-
+  async findOne(id: string) {
+    const category = await this.prisma.category.findUnique({
+      where: { id },
+    });
     if (!category) {
       throw new NotFoundException('Categoría no encontrada');
     }
-
     return category;
   }
-
-  async findBySlug(slug: string): Promise<Category> {
-    const category = await this.categoryModel.findOne({ slug }).exec();
-
+  async findBySlug(slug: string) {
+    const category = await this.prisma.category.findUnique({
+      where: { slug },
+    });
     if (!category) {
       throw new NotFoundException('Categoría no encontrada');
     }
-
     return category;
   }
-
-  async update(id: string, updateCategoryDto: UpdateCategoryDto): Promise<Category> {
-    const category = await this.findOne(id);
-
-    // Si se está actualizando el nombre, verificar que no exista
-    if (updateCategoryDto.name && updateCategoryDto.name !== category.name) {
-      const existingByName = await this.categoryModel.findOne({
-        name: updateCategoryDto.name,
-        _id: { $ne: id },
+  async update(id: string, updateCategoryDto: UpdateCategoryDto) {
+    const { name, slug } = updateCategoryDto;
+    if (name) {
+      const existingByName = await this.prisma.category.findUnique({
+        where: { name },
       });
-
-      if (existingByName) {
+      if (existingByName && existingByName.id !== id) {
         throw new ConflictException('Ya existe una categoría con ese nombre');
       }
     }
-
-    // Si se está actualizando el slug, verificar que no exista
-    if (updateCategoryDto.slug && updateCategoryDto.slug !== category.slug) {
-      const existingBySlug = await this.categoryModel.findOne({
-        slug: updateCategoryDto.slug,
-        _id: { $ne: id },
+    if (slug) {
+      const existingBySlug = await this.prisma.category.findUnique({
+        where: { slug },
       });
-
-      if (existingBySlug) {
+      if (existingBySlug && existingBySlug.id !== id) {
         throw new ConflictException('Ya existe una categoría con ese slug');
       }
     }
-
-    const updatedCategory = await this.categoryModel
-      .findByIdAndUpdate(id, updateCategoryDto, { new: true })
-      .exec();
-
+    const updatedCategory = await this.prisma.category.update({
+      where: { id },
+      data: updateCategoryDto,
+    });
     if (!updatedCategory) {
       throw new NotFoundException('Categoría no encontrada');
     }
-
     return updatedCategory;
   }
-
-  async remove(id: string): Promise<void> {
+  async remove(id: string) {
     const category = await this.findOne(id);
-    await this.categoryModel.findByIdAndDelete(id).exec();
+    await this.prisma.category.delete({
+      where: { id: category.id },
+    });
+    return { message: 'Categoría eliminada correctamente' };
   }
-
-  async activate(id: string): Promise<Category> {
-    const category = await this.categoryModel
-      .findByIdAndUpdate(id, { isActive: true }, { new: true })
-      .exec();
-
+  async activate(id: string) {
+    const category = await this.prisma.category.update({
+      where: { id },
+      data: { isActive: true },
+    });
     if (!category) {
       throw new NotFoundException('Categoría no encontrada');
     }
-
     return category;
   }
-
-  async deactivate(id: string): Promise<Category> {
-    const category = await this.categoryModel
-      .findByIdAndUpdate(id, { isActive: false }, { new: true })
-      .exec();
-
+  async deactivate(id: string) {
+    const category = await this.prisma.category.update({
+      where: { id },
+      data: { isActive: false },
+    });
     if (!category) {
       throw new NotFoundException('Categoría no encontrada');
     }
-
     return category;
   }
 }

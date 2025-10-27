@@ -1,91 +1,76 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-
+import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { lastValueFrom } from 'rxjs';
 @Injectable()
 export class UserService {
-  private readonly userServiceUrl = process.env.USER_SERVICE_URL || 'http://localhost:3001';
-
-  constructor(private readonly httpService: HttpService) {}
-
+  constructor(
+    @Inject('USER_SERVICE') private readonly userClient: ClientProxy,
+  ) {}
   async findAll(query: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.userServiceUrl}/users`, { params: query })
+      const users = await lastValueFrom(
+        this.userClient.send('get_all_users', query)
       );
-      return response.data;
+      return users;
     } catch (error) {
       throw new HttpException(
-        'Error al obtener usuarios del microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        'Error al obtener usuarios del microservicio (NATS)',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async findOne(id: string) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.userServiceUrl}/users/${id}`)
+      const user = await lastValueFrom(
+        this.userClient.send('get_user_by_id', { id })
       );
-      return response.data;
+      if (!user) throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
+      return user;
     } catch (error) {
-      if (error.response?.status === 404) {
-        throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
-      }
       throw new HttpException(
-        'Error al obtener usuario del microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        'Error al obtener usuario del microservicio (NATS)',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async create(createUserDto: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.userServiceUrl}/users`, createUserDto)
+      const user = await lastValueFrom(
+        this.userClient.send('create_user', createUserDto)
       );
-      return response.data;
+      return user;
     } catch (error) {
-      if (error.response?.status === 400) {
-        throw new HttpException(error.response.data.message, HttpStatus.BAD_REQUEST);
-      }
       throw new HttpException(
-        'Error al crear usuario en el microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        'Error al crear usuario en el microservicio (NATS)',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async update(id: string, updateUserDto: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.put(`${this.userServiceUrl}/users/${id}`, updateUserDto)
+      const user = await lastValueFrom(
+        this.userClient.send('update_user', { id, ...updateUserDto })
       );
-      return response.data;
+      if (!user) throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
+      return user;
     } catch (error) {
-      if (error.response?.status === 404) {
-        throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
-      }
       throw new HttpException(
-        'Error al actualizar usuario en el microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        'Error al actualizar usuario en el microservicio (NATS)',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async remove(id: string) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.delete(`${this.userServiceUrl}/users/${id}`)
+      const result = await lastValueFrom(
+        this.userClient.send('delete_user', { id })
       );
-      return response.data;
+      if (!result) throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
+      return result;
     } catch (error) {
-      if (error.response?.status === 404) {
-        throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
-      }
       throw new HttpException(
-        'Error al eliminar usuario del microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        'Error al eliminar usuario del microservicio (NATS)',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }

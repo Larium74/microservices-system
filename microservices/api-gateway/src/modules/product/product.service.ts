@@ -1,122 +1,107 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
+import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
-
 @Injectable()
 export class ProductService {
-  private readonly productServiceUrl = process.env.PRODUCT_SERVICE_URL || 'http://localhost:3002';
-
-  constructor(private readonly httpService: HttpService) {}
-
+  constructor(
+    @Inject('PRODUCT_SERVICE') private readonly productClient: ClientProxy,
+  ) {}
   async findAll(query: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.productServiceUrl}/products`, { params: query })
+      return await firstValueFrom(
+        this.productClient.send('get_all_products', query)
       );
-      return response.data;
     } catch (error) {
       throw new HttpException(
         'Error al obtener productos del microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async findOne(id: string) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.productServiceUrl}/products/${id}`)
+      return await firstValueFrom(
+        this.productClient.send('get_product_by_id', { id })
       );
-      return response.data;
     } catch (error) {
-      if (error.response?.status === 404) {
+      if (error.status === 404) {
         throw new HttpException('Producto no encontrado', HttpStatus.NOT_FOUND);
       }
       throw new HttpException(
         'Error al obtener producto del microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async create(createProductDto: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.productServiceUrl}/products`, createProductDto)
+      return await firstValueFrom(
+        this.productClient.send('create_product', createProductDto)
       );
-      return response.data;
     } catch (error) {
-      if (error.response?.status === 400) {
-        throw new HttpException(error.response.data.message, HttpStatus.BAD_REQUEST);
-      }
       throw new HttpException(
         'Error al crear producto en el microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async update(id: string, updateProductDto: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.put(`${this.productServiceUrl}/products/${id}`, updateProductDto)
+      return await firstValueFrom(
+        this.productClient.send('update_product', { id, ...updateProductDto })
       );
-      return response.data;
     } catch (error) {
-      if (error.response?.status === 404) {
+      if (error.status === 404) {
         throw new HttpException('Producto no encontrado', HttpStatus.NOT_FOUND);
       }
       throw new HttpException(
         'Error al actualizar producto en el microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async remove(id: string) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.delete(`${this.productServiceUrl}/products/${id}`)
+      return await firstValueFrom(
+        this.productClient.send('delete_product', { id })
       );
-      return response.data;
     } catch (error) {
-      if (error.response?.status === 404) {
+      if (error.status === 404) {
         throw new HttpException('Producto no encontrado', HttpStatus.NOT_FOUND);
       }
       throw new HttpException(
         'Error al eliminar producto del microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async findByCategory(category: string, query: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.productServiceUrl}/products/category/${category}`, { params: query })
+      return await firstValueFrom(
+        this.productClient.send('get_products_by_category', {
+          category,
+          ...query,
+        })
       );
-      return response.data;
     } catch (error) {
       throw new HttpException(
-        'Error al obtener productos por categoría del microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        'Error al obtener productos por categoría',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
-
   async addReview(id: string, reviewDto: any) {
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.productServiceUrl}/products/${id}/reviews`, reviewDto)
+      return await firstValueFrom(
+        this.productClient.send('add_product_review', { id, ...reviewDto })
       );
-      return response.data;
     } catch (error) {
-      if (error.response?.status === 404) {
+      if (error.status === 404) {
         throw new HttpException('Producto no encontrado', HttpStatus.NOT_FOUND);
       }
       throw new HttpException(
-        'Error al agregar reseña en el microservicio',
-        HttpStatus.SERVICE_UNAVAILABLE
+        'Error al agregar reseña',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }

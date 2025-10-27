@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id          String    @id @map("_id") @default(auto()) @db.ObjectId
+  name        String    @unique
+  description String
+  slug        String    @unique
+  isActive    Boolean   @default(true)
+  image       String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id            String    @id @map("_id") @default(auto()) @db.ObjectId
+  name          String
+  description   String
+  sku           String    @unique
+  price         Float
+  comparePrice  Float?    @default(0)
+  stock         Int
+  categoryId    String    @db.ObjectId
+  images        String[]
+  tags          String[]
+  isActive      Boolean   @default(true)
+  isFeatured    Boolean   @default(false)
+  specifications Json?
+  seoData       SeoData?
+  reviews       Review[]
+  averageRating Float     @default(0)
+  totalReviews  Int       @default(0)
+  totalSales    Int       @default(0)
+  views         Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+type Review {
+  userId    String
+  userName  String
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now())
+}
+
+type SeoData {
+  title       String?
+  description String?
+  keywords    String[]
+}

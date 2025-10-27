@@ -1,105 +1,50 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  Query,
-} from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { AddReviewDto } from './dto/add-review.dto';
-
-@Controller('products')
+@Controller()
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
-
-  @Post()
-  create(@Body() createProductDto: CreateProductDto) {
+  @MessagePattern('create_product')
+  create(@Payload() createProductDto: CreateProductDto) {
     return this.productService.create(createProductDto);
   }
-
-  @Get()
-  findAll(
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
-    @Query('search') search?: string,
-    @Query('category') category?: string,
-    @Query('minPrice') minPrice?: number,
-    @Query('maxPrice') maxPrice?: number,
-    @Query('featured') featured?: boolean,
-    @Query('active') active?: boolean,
-    @Query('sortBy') sortBy: string = 'createdAt',
-    @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'desc',
-  ) {
-    return this.productService.findAll({
-      page,
-      limit,
-      search,
-      category,
-      minPrice,
-      maxPrice,
-      featured,
-      active,
-      sortBy,
-      sortOrder,
-    });
+  @MessagePattern('find_all_products')
+  findAll(@Payload() query: any) {
+    return this.productService.findAll(query);
   }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
+  @MessagePattern('find_one_product')
+  findOne(@Payload('id') id: string) {
     return this.productService.findOne(id);
   }
-
-  @Get('sku/:sku')
-  findBySku(@Param('sku') sku: string) {
-    return this.productService.findBySku(sku);
+  @MessagePattern('update_product')
+  update(@Payload() data: { id: string; dto: UpdateProductDto }) {
+    return this.productService.update(data.id, data.dto);
   }
-
-  @Get('category/:categoryId')
-  findByCategory(
-    @Param('categoryId') categoryId: string,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
-  ) {
-    return this.productService.findByCategory(categoryId, page, limit);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
-    return this.productService.update(id, updateProductDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
+  @MessagePattern('remove_product')
+  remove(@Payload('id') id: string) {
     return this.productService.remove(id);
   }
-
-  @Post(':id/reviews')
-  addReview(@Param('id') id: string, @Body() addReviewDto: AddReviewDto) {
-    return this.productService.addReview(id, addReviewDto);
+  @MessagePattern('add_review')
+  addReview(@Payload() data: { id: string; dto: AddReviewDto }) {
+    return this.productService.addReview(data.id, data.dto);
   }
-
-  @Patch(':id/stock')
-  updateStock(@Param('id') id: string, @Body('quantity') quantity: number) {
-    return this.productService.updateStock(id, quantity);
+  @MessagePattern('update_stock')
+  updateStock(@Payload() data: { id: string; quantity: number }) {
+    return this.productService.updateStock(data.id, data.quantity);
   }
-
-  @Patch(':id/view')
-  incrementViews(@Param('id') id: string) {
+  @MessagePattern('increment_views')
+  incrementViews(@Payload('id') id: string) {
     return this.productService.incrementViews(id);
   }
-
-  @Get('featured/list')
-  getFeatured(@Query('limit') limit: number = 10) {
-    return this.productService.getFeatured(limit);
+  @MessagePattern('get_featured_products')
+  getFeatured(@Payload('limit') limit: number) {
+    return this.productService.getFeatured(limit || 10);
   }
-
-  @Get('popular/list')
-  getPopular(@Query('limit') limit: number = 10) {
-    return this.productService.getPopular(limit);
+  @MessagePattern('get_popular_products')
+  getPopular(@Payload('limit') limit: number) {
+    return this.productService.getPopular(limit || 10);
   }
 }

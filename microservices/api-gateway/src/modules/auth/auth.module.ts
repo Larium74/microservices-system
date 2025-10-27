@@ -5,7 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
-
+import { NatsModule } from 'src/nats/nats.module';
 @Module({
   imports: [
     HttpModule,
@@ -14,6 +14,7 @@ import { JwtStrategy } from './jwt.strategy';
       secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
       signOptions: { expiresIn: '24h' },
     }),
+    NatsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

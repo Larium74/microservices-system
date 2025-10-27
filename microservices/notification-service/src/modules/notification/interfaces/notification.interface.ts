@@ -8,7 +8,6 @@ export interface INotification {
   read?: boolean;
   timestamp?: string;
 }
-
 export enum NotificationType {
   INFO = 'info',
   SUCCESS = 'success',
@@ -19,7 +18,6 @@ export enum NotificationType {
   PRODUCT_UPDATE = 'product_update',
   ORDER_STATUS = 'order_status',
 }
-
 export interface ISendNotificationDto {
   userId?: string;
   userIds?: string[];

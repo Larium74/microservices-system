@@ -1,5 +1,9 @@
 services:
-  # Bases de datos
+  # ===============================================
+  # BASES DE DATOS
+  # ===============================================
+  
+  # PostgreSQL para User Service
   postgres:
     image: postgres:15
     container_name: microservices-postgres
@@ -13,7 +17,13 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # MongoDB para Product Service
   mongodb:
     image: mongo:7
     container_name: microservices-mongo
@@ -22,12 +32,18 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: mongo123
       MONGO_INITDB_DATABASE: productdb
     ports:
-      - '28017:27017'
+      - '27017:27017'
     volumes:
       - mongodb_data:/data/db
     networks:
       - microservices-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Redis para Notification Service
   redis:
     image: redis:7-alpine
     container_name: microservices-redis
@@ -38,30 +54,31 @@ services:
       - redis_data:/data
     networks:
       - microservices-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # API Gateway
-  api-gateway:
-    build:
-      context: ./microservices/api-gateway
-      dockerfile: Dockerfile
-    container_name: api-gateway
+  # NATS para comunicación entre microservicios
+  nats:
+    image: nats:2.10-alpine
+    container_name: microservices-nats
     ports:
-      - '3000:3000'
-    environment:
-      - NODE_ENV=development
-      - USER_SERVICE_URL=http://user-service:3001
-      - PRODUCT_SERVICE_URL=http://product-service:3002
-      - NOTIFICATION_SERVICE_URL=http://notification-service:3003
-    depends_on:
-      - user-service
-      - product-service
-      - notification-service
+      - "4222:4222"   # puerto para conexiones de clientes
+      - "8222:8222"   # puerto para el panel de monitoreo (HTTP)
+    command: ["-js", "-m", "8222"]  # habilita JetStream y monitoreo
     networks:
       - microservices-network
-    volumes:
-      - ./microservices/api-gateway:/app
-      - /app/node_modules
-    command: npm run start:dev
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===============================================
+  # MICROSERVICIOS
+  # ===============================================
 
   # User Service
   user-service:
@@ -73,20 +90,20 @@ services:
       - '3001:3001'
     environment:
       - NODE_ENV=development
-      - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - DATABASE_NAME=userdb
-      - DATABASE_USER=postgres
-      - DATABASE_PASSWORD=postgres123
-      - JWT_SECRET=your-super-secret-jwt-key
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/userdb
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - NATS_URL=nats://nats:4222
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - microservices-network
     volumes:
       - ./microservices/user-service:/app
       - /app/node_modules
-    command: npm run start:dev
+      - /app/generated
+    command: sh -c "npm run prisma:generate && npm run prisma:push && npm run start:dev"
+    restart: unless-stopped
 
   # Product Service
   product-service:
@@ -98,15 +115,19 @@ services:
       - '3002:3002'
     environment:
       - NODE_ENV=development
-      - MONGODB_URI=mongodb://mongo:mongo123@mongodb:27017/productdb?authSource=admin
+      - DATABASE_URL=mongodb://mongo:mongo123@mongodb:27017/productdb?authSource=admin
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - NATS_URL=nats://nats:4222
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - microservices-network
     volumes:
       - ./microservices/product-service:/app
       - /app/node_modules
-    command: npm run start:dev
+    command: sh -c "npm run prisma:generate && npm run prisma:push && npm run start:dev"
+    restart: unless-stopped
 
   # Notification Service
   notification-service:
@@ -121,20 +142,57 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=redis123
+      - NATS_URL=nats://nats:4222
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - microservices-network
     volumes:
       - ./microservices/notification-service:/app
       - /app/node_modules
     command: npm run start:dev
+    restart: unless-stopped
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./microservices/api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - USER_SERVICE_URL=http://user-service:3001
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3003
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      - user-service
+      - product-service
+      - notification-service
+      - nats
+    networks:
+      - microservices-network
+    volumes:
+      - ./microservices/api-gateway:/app
+      - /app/node_modules
+    command: npm run start:dev
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
   mongodb_data:
+    driver: local
   redis_data:
+    driver: local
 
 networks:
   microservices-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

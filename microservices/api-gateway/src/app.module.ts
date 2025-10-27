@@ -2,14 +2,13 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './modules/user/user.module';
 import { ProductModule } from './modules/product/product.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { AuthModule } from './modules/auth/auth.module';
-
+import { NatsModule } from './nats/nats.module';
 @Module({
   imports: [
     HttpModule,
@@ -22,6 +21,7 @@ import { AuthModule } from './modules/auth/auth.module';
     ProductModule,
     NotificationModule,
     AuthModule,
+    NatsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

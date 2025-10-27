@@ -1,133 +1,131 @@
 import {
   Injectable,
   NotFoundException,
-  ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
-
+import { FindAllUserDto } from './dto/findAll-user.dto';
+import * as bcrypt from 'bcryptjs';
 @Injectable()
 export class UserService {
-  constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
-  ) {}
-
-  async create(createUserDto: CreateUserDto): Promise<User> {
-    // Verificar si el email ya existe
-    const existingUser = await this.userRepository.findOne({
-      where: { email: createUserDto.email },
+  private readonly logger = new Logger(UserService.name);
+  constructor(private readonly prisma: PrismaService) {}
+  async create(createUserDto: CreateUserDto) {
+    const { email, password } = createUserDto;
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
     });
-
     if (existingUser) {
-      throw new ConflictException('El email ya está registrado');
+      throw new BadRequestException('El correo ya está registrado');
     }
-
-    const user = this.userRepository.create({
-      ...createUserDto,
-      roles: createUserDto.roles || ['user'],
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        ...createUserDto,
+        password: hashedPassword,
+      },
     });
-
-    return await this.userRepository.save(user);
+    this.logger.log(`Usuario creado: ${user.email}`);
+    const { password: _, ...rest } = user;
+    return rest;
   }
-
-  async findAll(page: number = 1, limit: number = 10, search?: string) {
-    const skip = (page - 1) * limit;
+  async findAll(params: FindAllUserDto) {
+    const { page = 1, limit = 10, search } = params;
     const where = search
-      ? [
-          { name: Like(`%${search}%`) },
-          { lastName: Like(`%${search}%`) },
-          { email: Like(`%${search}%`) },
-        ]
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as any } },
+            { email: { contains: search, mode: 'insensitive' as any } },
+          ],
+        }
       : {};
-
-    const [users, total] = await this.userRepository.findAndCount({
-      where,
-      skip,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
-
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    const usersWithoutPasswords = users.map(({ password, ...rest }) => rest);
     return {
-      data: users,
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      users: usersWithoutPasswords,
     };
   }
-
-  async findOne(id: string): Promise<User> {
-    const user = await this.userRepository.findOne({
+  async findOne(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
+    const { password, ...rest } = user;
+    return rest;
+  }
+  async update(updateUserDto: UpdateUserDto) {
+    const { id, password, ...rest } = updateUserDto;
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
+    let dataToUpdate: any = { ...rest };
+    if (password) {
+      dataToUpdate.password = await bcrypt.hash(password, 10);
+    }
+    const updatedUser = await this.prisma.user.update({
       where: { id },
+      data: dataToUpdate,
     });
-
+    this.logger.log(`Usuario actualizado: ${updatedUser.email}`);
+    const { password: _, ...restUser } = updatedUser;
+    return restUser;
+  }
+  async remove(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
-
-    return user;
+    await this.prisma.user.delete({ where: { id } });
+    this.logger.log(`Usuario eliminado: ${user.email}`);
+    return { message: 'Usuario eliminado correctamente' };
   }
-
-  async findByEmail(email: string): Promise<User> {
-    const user = await this.userRepository.findOne({
-      where: { email },
-    });
-
+  async findByEmail(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
+      throw new NotFoundException(`Usuario con email ${email} no encontrado`);
     }
-
-    return user;
+    const { password, ...rest } = user;
+    return rest;
   }
-
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const user = await this.findOne(id);
-
-    // Si se está actualizando el email, verificar que no exista
-    if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingUser = await this.userRepository.findOne({
-        where: { email: updateUserDto.email },
-      });
-
-      if (existingUser) {
-        throw new ConflictException('El email ya está registrado');
-      }
+  async activate(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
-
-    // No permitir actualización directa de la contraseña aquí
-    if (updateUserDto.password) {
-      delete updateUserDto.password;
-    }
-
-    Object.assign(user, updateUserDto);
-    return await this.userRepository.save(user);
-  }
-
-  async remove(id: string): Promise<void> {
-    const user = await this.findOne(id);
-    await this.userRepository.remove(user);
-  }
-
-  async activate(id: string): Promise<User> {
-    const user = await this.findOne(id);
-    user.isActive = true;
-    return await this.userRepository.save(user);
-  }
-
-  async deactivate(id: string): Promise<User> {
-    const user = await this.findOne(id);
-    user.isActive = false;
-    return await this.userRepository.save(user);
-  }
-
-  async updateLastLogin(id: string): Promise<void> {
-    await this.userRepository.update(id, {
-      lastLogin: new Date(),
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { isActive: true },
     });
+    this.logger.log(`Usuario activado: ${updated.email}`);
+    const { password, ...rest } = updated;
+    return rest;
+  }
+  async deactivate(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    this.logger.log(`Usuario desactivado: ${updated.email}`);
+    const { password, ...rest } = updated;
+    return rest;
   }
 }

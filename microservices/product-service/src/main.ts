@@ -1,28 +1,22 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
-
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { envs } from './config';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  
-  // Habilitar CORS
-  app.enableCors({
-    origin: true,
-    credentials: true,
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
+    transport: Transport.NATS,
+    options: {
+      url: envs.nats_server_url,
+    },
   });
-  
-  // Configurar validación global
+  const logger = new Logger ('Bootstrap');
   app.useGlobalPipes(new ValidationPipe({
     transform: true,
     whitelist: true,
     forbidNonWhitelisted: true,
   }));
-  
-  const port = process.env.PORT || 3002;
-  await app.listen(port);
-  
-  console.log(`📦 Product Service ejecutándose en puerto ${port}`);
-  console.log(`🍃 Base de datos MongoDB: ${process.env.MONGODB_URI}`);
+  await app.listen();
+  logger.log(`user-microservice is running on:${envs.server_port}`);
 }
-
 bootstrap();

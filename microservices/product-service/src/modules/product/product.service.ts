@@ -4,14 +4,11 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { PrismaService } from 'src/prisma-service/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { AddReviewDto } from './dto/add-review.dto';
-import { Product, ProductDocument } from './schemas/product.schema';
 import { CategoryService } from '../category/category.service';
-
 interface FindAllOptions {
   page: number;
   limit: number;
@@ -24,36 +21,27 @@ interface FindAllOptions {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
 }
-
 @Injectable()
 export class ProductService {
   constructor(
-    @InjectModel(Product.name)
-    private productModel: Model<ProductDocument>,
+    private prisma: PrismaService,
     private categoryService: CategoryService,
   ) {}
-
-  async create(createProductDto: CreateProductDto): Promise<Product> {
-    // Verificar si el SKU ya existe
-    const existingSku = await this.productModel.findOne({
-      sku: createProductDto.sku,
+  async create(createProductDto: CreateProductDto) {
+    const existingSku = await this.prisma.product.findUnique({
+      where: { sku: createProductDto.sku },
     });
-
     if (existingSku) {
       throw new ConflictException('Ya existe un producto con ese SKU');
     }
-
-    // Verificar que la categoría existe
     await this.categoryService.findOne(createProductDto.categoryId);
-
-    const product = new this.productModel({
-      ...createProductDto,
-      categoryId: new Types.ObjectId(createProductDto.categoryId),
+    return await this.prisma.product.create({
+      data: {
+        ...createProductDto,
+        categoryId: createProductDto.categoryId,
+      },
     });
-
-    return product.save();
   }
-
   async findAll(options: FindAllOptions) {
     const {
       page,
@@ -67,52 +55,31 @@ export class ProductService {
       sortBy,
       sortOrder,
     } = options;
-
     const skip = (page - 1) * limit;
-    const filter: any = {};
-
-    // Filtro de búsqueda por texto
+    const where: any = {};
     if (search) {
-      filter.$text = { $search: search };
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
     }
-
-    // Filtro por categoría
-    if (category) {
-      filter.categoryId = new Types.ObjectId(category);
-    }
-
-    // Filtro por rango de precios
+    if (category) where.categoryId = category;
+    if (featured !== undefined) where.isFeatured = featured;
+    if (active !== undefined) where.isActive = active;
     if (minPrice !== undefined || maxPrice !== undefined) {
-      filter.price = {};
-      if (minPrice !== undefined) filter.price.$gte = minPrice;
-      if (maxPrice !== undefined) filter.price.$lte = maxPrice;
+      where.price = {};
+      if (minPrice !== undefined) where.price.gte = minPrice;
+      if (maxPrice !== undefined) where.price.lte = maxPrice;
     }
-
-    // Filtro por productos destacados
-    if (featured !== undefined) {
-      filter.isFeatured = featured;
-    }
-
-    // Filtro por productos activos
-    if (active !== undefined) {
-      filter.isActive = active;
-    }
-
-    // Configurar ordenamiento
-    const sortOptions: any = {};
-    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
-
     const [products, total] = await Promise.all([
-      this.productModel
-        .find(filter)
-        .populate('categoryId', 'name slug')
-        .skip(skip)
-        .limit(limit)
-        .sort(sortOptions)
-        .exec(),
-      this.productModel.countDocuments(filter),
+      this.prisma.product.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.product.count({ where }),
     ]);
-
     return {
       data: products,
       total,
@@ -121,62 +88,32 @@ export class ProductService {
       totalPages: Math.ceil(total / limit),
     };
   }
-
-  async findOne(id: string): Promise<Product> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('ID de producto inválido');
-    }
-
-    const product = await this.productModel
-      .findById(id)
-      .populate('categoryId', 'name slug')
-      .exec();
-
-    if (!product) {
-      throw new NotFoundException('Producto no encontrado');
-    }
-
+  async findOne(id: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
     return product;
   }
-
-  async findBySku(sku: string): Promise<Product> {
-    const product = await this.productModel
-      .findOne({ sku })
-      .populate('categoryId', 'name slug')
-      .exec();
-
-    if (!product) {
-      throw new NotFoundException('Producto no encontrado');
-    }
-
+  async findBySku(sku: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { sku },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
     return product;
   }
-
-  async findByCategory(categoryId: string, page: number = 1, limit: number = 10) {
-    if (!Types.ObjectId.isValid(categoryId)) {
-      throw new BadRequestException('ID de categoría inválido');
-    }
-
-    // Verificar que la categoría existe
+  async findByCategory(categoryId: string, page = 1, limit = 10) {
     await this.categoryService.findOne(categoryId);
-
     const skip = (page - 1) * limit;
-    const filter = {
-      categoryId: new Types.ObjectId(categoryId),
-      isActive: true,
-    };
-
     const [products, total] = await Promise.all([
-      this.productModel
-        .find(filter)
-        .populate('categoryId', 'name slug')
-        .skip(skip)
-        .limit(limit)
-        .sort({ createdAt: -1 })
-        .exec(),
-      this.productModel.countDocuments(filter),
+      this.prisma.product.findMany({
+        where: { categoryId, isActive: true },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.product.count({ where: { categoryId, isActive: true } }),
     ]);
-
     return {
       data: products,
       total,
@@ -185,122 +122,93 @@ export class ProductService {
       totalPages: Math.ceil(total / limit),
     };
   }
-
-  async update(id: string, updateProductDto: UpdateProductDto): Promise<Product> {
+  async update(id: string, updateProductDto: UpdateProductDto) {
     const product = await this.findOne(id);
-
-    // Si se está actualizando el SKU, verificar que no exista
     if (updateProductDto.sku && updateProductDto.sku !== product.sku) {
-      const existingSku = await this.productModel.findOne({
-        sku: updateProductDto.sku,
-        _id: { $ne: id },
+      const existingSku = await this.prisma.product.findUnique({
+        where: { sku: updateProductDto.sku },
       });
-
       if (existingSku) {
         throw new ConflictException('Ya existe un producto con ese SKU');
       }
     }
-
-    // Si se está actualizando la categoría, verificar que existe
     if (updateProductDto.categoryId) {
       await this.categoryService.findOne(updateProductDto.categoryId);
-      updateProductDto.categoryId = new Types.ObjectId(updateProductDto.categoryId) as any;
     }
-
-    const updatedProduct = await this.productModel
-      .findByIdAndUpdate(id, updateProductDto, { new: true })
-      .populate('categoryId', 'name slug')
-      .exec();
-
-    if (!updatedProduct) {
-      throw new NotFoundException('Producto no encontrado');
-    }
-
-    return updatedProduct;
+    return await this.prisma.product.update({
+      where: { id },
+      data: updateProductDto,
+    });
   }
-
-  async remove(id: string): Promise<void> {
-    const product = await this.findOne(id);
-    await this.productModel.findByIdAndDelete(id).exec();
+  async remove(id: string) {
+    await this.findOne(id);
+    await this.prisma.product.delete({ where: { id } });
+    return { message: 'Producto eliminado correctamente' };
   }
-
-  async addReview(id: string, addReviewDto: AddReviewDto): Promise<Product> {
-    const product = await this.productModel.findById(id).exec();
-    
-    if (!product) {
-      throw new NotFoundException('Producto no encontrado');
-    }
-
-    // Verificar si el usuario ya ha dejado una reseña
-    const existingReview = product.reviews.find(
-      (review) => review.userId === addReviewDto.userId,
+  async addReview(id: string, addReviewDto: AddReviewDto) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+    const existingReview = product.reviews?.find(
+      (r) => r.userId === addReviewDto.userId,
     );
-
-    if (existingReview) {
-      throw new ConflictException('El usuario ya ha dejado una reseña para este producto');
-    }
-
-    // Agregar la nueva reseña
-    const newReview = {
-      ...addReviewDto,
-      createdAt: new Date(),
-    };
-
-    product.reviews.push(newReview as any);
-
-    // Recalcular la calificación promedio
-    const totalRating = product.reviews.reduce((sum, review) => sum + review.rating, 0);
-    product.averageRating = Math.round((totalRating / product.reviews.length) * 10) / 10;
-    product.totalReviews = product.reviews.length;
-
-    return await product.save();
+    if (existingReview)
+      throw new ConflictException('El usuario ya ha dejado una reseña');
+    const updatedProduct = await this.prisma.product.update({
+      where: { id },
+      data: {
+        reviews: {
+          push: {
+            ...addReviewDto,
+            createdAt: new Date(),
+          },
+        },
+      },
+    });
+    const reviews = updatedProduct.reviews ?? [];
+    const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0);
+    const avgRating =
+      reviews.length > 0
+        ? Math.round((totalRating / reviews.length) * 10) / 10
+        : 0;
+    return await this.prisma.product.update({
+      where: { id },
+      data: {
+        averageRating: avgRating,
+        totalReviews: reviews.length,
+      },
+    });
   }
-
-  async updateStock(id: string, quantity: number): Promise<Product> {
-    if (quantity < 0) {
-      throw new BadRequestException('La cantidad no puede ser negativa');
-    }
-
-    const product = await this.productModel
-      .findByIdAndUpdate(id, { stock: quantity }, { new: true })
-      .populate('categoryId', 'name slug')
-      .exec();
-
-    if (!product) {
-      throw new NotFoundException('Producto no encontrado');
-    }
-
+  async updateStock(id: string, quantity: number) {
+    if (quantity < 0) throw new BadRequestException('Cantidad inválida');
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: { stock: quantity },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
     return product;
   }
-
-  async incrementViews(id: string): Promise<Product> {
-    const product = await this.productModel
-      .findByIdAndUpdate(id, { $inc: { views: 1 } }, { new: true })
-      .populate('categoryId', 'name slug')
-      .exec();
-
-    if (!product) {
-      throw new NotFoundException('Producto no encontrado');
-    }
-
+  async incrementViews(id: string) {
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: { views: { increment: 1 } },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
     return product;
   }
-
-  async getFeatured(limit: number = 10): Promise<Product[]> {
-    return this.productModel
-      .find({ isFeatured: true, isActive: true })
-      .populate('categoryId', 'name slug')
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .exec();
+  async getFeatured(limit = 10) {
+    return this.prisma.product.findMany({
+      where: { isFeatured: true, isActive: true },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
   }
-
-  async getPopular(limit: number = 10): Promise<Product[]> {
-    return this.productModel
-      .find({ isActive: true })
-      .populate('categoryId', 'name slug')
-      .limit(limit)
-      .sort({ totalSales: -1, views: -1 })
-      .exec();
+  async getPopular(limit = 10) {
+    return this.prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: [{ totalSales: 'desc' }, { views: 'desc' }],
+      take: limit,
+    });
   }
 }
